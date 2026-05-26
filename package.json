@@ -1,0 +1,23 @@
+{
+  "name": "jixi",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "test": "turbo test",
+    "dev": "turbo dev",
+    "clean": "turbo clean",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.3",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
