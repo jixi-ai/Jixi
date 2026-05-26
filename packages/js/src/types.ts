@@ -29,6 +29,7 @@ export type WorkflowRunEventType =
   | 'step_completed'
   | 'step_failed'
   | 'workflow_message'
+  | 'content_chunk'
 
 export interface WorkflowRunEvent {
   type: WorkflowRunEventType
@@ -87,6 +88,15 @@ export interface WorkflowMessageData {
   message: string
   stepIndex: number
   actionType: string
+}
+
+export interface ContentChunkData {
+  stepIndex: number
+  contentType: 'text' | 'audio'
+  encoding: 'utf-8' | 'base64'
+  chunk: string
+  index: number
+  done: boolean
 }
 
 export type HeartbeatEvent = { type: 'heartbeat' }

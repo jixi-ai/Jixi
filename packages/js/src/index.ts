@@ -15,4 +15,5 @@ export type {
   StepCompletedData,
   StepFailedData,
   WorkflowMessageData,
+  ContentChunkData,
 } from './types'
