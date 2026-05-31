@@ -7,5 +7,5 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   platform: 'browser',
-  external: ['react', 'react-dom', '@jixi/js'],
+  external: ['react'],
 })
