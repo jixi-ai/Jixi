@@ -1,5 +1,6 @@
 export { JixiClient } from './client'
 export { JixiError } from './errors'
+export { AudioStream } from './audio-stream'
 export type { JixiErrorCode } from './errors'
 export type { JixiStream } from './stream'
 export type {
@@ -16,4 +17,14 @@ export type {
   StepFailedData,
   WorkflowMessageData,
   ContentChunkData,
+  AudioStreamEventType,
+  AudioStreamEvent,
+  AudioStreamOptions,
+  SessionStartedData,
+  TranscriptInterimData,
+  TranscriptFinalData,
+  ChunkIndexedData,
+  ChunkFailedData,
+  SessionCompletedData,
+  SessionFailedData,
 } from './types'

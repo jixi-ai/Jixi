@@ -2,7 +2,8 @@ import { TokenManager } from './token-manager'
 import { _request } from './request'
 import { createJixiStream } from './stream'
 import { JixiError } from './errors'
-import type { JixiClientConfig, RunWorkflowOptions } from './types'
+import { AudioStream } from './audio-stream'
+import type { JixiClientConfig, RunWorkflowOptions, AudioStreamOptions, AudioStreamEvent } from './types'
 import type { JixiStream } from './stream'
 
 export class JixiClient {
@@ -105,11 +106,97 @@ export class JixiClient {
     return createJixiStream(runId, response)
   }
 
+  async startAudioStream(appId: string, options?: AudioStreamOptions): Promise<AudioStream> {
+    if (typeof WebSocket === 'undefined') {
+      throw new JixiError(
+        'WebSocket is not available. Audio streaming requires a WebSocket-capable environment.',
+        'unknown',
+      )
+    }
+
+    const token = await this.tokenManager.getToken()
+    const wsUrl = this._buildWsUrl(`/applications/${appId}/aiStream/audio`, token)
+
+    return new Promise<AudioStream>((resolve, reject) => {
+      const ws = new WebSocket(wsUrl)
+      ws.binaryType = 'arraybuffer'
+      const stream = new AudioStream(ws)
+      let settled = false
+
+      const settle = (fn: () => void) => {
+        if (settled) return
+        settled = true
+        fn()
+      }
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'start', ...options }))
+      }
+
+      ws.onmessage = (ev: MessageEvent) => {
+        if (typeof ev.data !== 'string') return
+        let event: AudioStreamEvent
+        try {
+          event = JSON.parse(ev.data) as AudioStreamEvent
+        } catch {
+          return
+        }
+
+        stream._push(event)
+
+        if (!settled) {
+          if (event.type === 'session_started') {
+            stream.sessionId = event.sessionId
+            stream.fileId = (event.data as { fileId: string }).fileId
+            settle(() => resolve(stream))
+          } else if (event.type === 'session_failed') {
+            settle(() =>
+              reject(
+                new JixiError(
+                  ((event.data as { error?: string }).error) ?? 'session_failed',
+                  'server_error',
+                ),
+              ),
+            )
+          }
+        }
+      }
+
+      ws.onclose = (ev: CloseEvent) => {
+        if (!settled) {
+          const code = ev.code === 4001 ? 'auth_failed' : 'stream_interrupted'
+          settle(() =>
+            reject(new JixiError(`WebSocket closed before session started (${ev.code})`, code)),
+          )
+        }
+        stream._done()
+      }
+
+      ws.onerror = () => {
+        // onerror is always followed by onclose in browsers; _done() called there
+        if (!settled) {
+          settle(() =>
+            reject(new JixiError('WebSocket connection error', 'stream_interrupted')),
+          )
+        }
+      }
+    })
+  }
+
   private _buildUrl(path: string, options?: RunWorkflowOptions): string {
     const url = new URL(`${this._baseUrl()}${path}`)
     if (options?.environment) url.searchParams.set('environment', options.environment)
     if (options?.versionId) url.searchParams.set('versionId', options.versionId)
     if (options?.draft) url.searchParams.set('draft', 'true')
+    return url.toString()
+  }
+
+  private _buildWsUrl(path: string, token: string): string {
+    const base = this._baseUrl()
+      .replace(/^https:\/\//, 'wss://')
+      .replace(/^http:\/\//, 'ws://')
+    const url = new URL(`${base}${path}`)
+    url.searchParams.set('token', token)
     return url.toString()
   }
 

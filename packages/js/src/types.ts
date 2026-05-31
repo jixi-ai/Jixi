@@ -100,3 +100,80 @@ export interface ContentChunkData {
 }
 
 export type HeartbeatEvent = { type: 'heartbeat' }
+
+// ─── Audio Stream Types ───────────────────────────────────────────────────────
+
+export type AudioStreamEventType =
+  | 'session_started'
+  | 'transcript_interim'
+  | 'transcript_final'
+  | 'chunk_indexed'
+  | 'chunk_failed'
+  | 'session_completed'
+  | 'session_failed'
+
+export interface AudioStreamEvent {
+  type: AudioStreamEventType
+  sessionId: string
+  seq: number
+  timestamp: string
+  data?: Record<string, unknown>
+}
+
+export type AudioStreamOptions = {
+  name?: string
+  encoding?: 'linear16' | 'opus' | 'webm' | 'mulaw' | 'flac'
+  sampleRateHz?: number
+  folders?: string[]
+  diarize?: boolean
+  languageHint?: string
+  interimResults?: boolean
+  autoDeidentify?: boolean
+}
+
+export interface SessionStartedData {
+  fileId: string
+  provider: 'deepgram'
+  encoding: string
+  diarize: boolean
+}
+
+export interface TranscriptInterimData {
+  text: string
+  speaker?: string
+  startMs: number
+  endMs: number
+}
+
+export interface TranscriptFinalData {
+  chunkId: string
+  seq: number
+  text: string
+  speakers: string[]
+  startMs: number
+  endMs: number
+  deidentified: boolean
+  redactionCount?: number
+}
+
+export interface ChunkIndexedData {
+  chunkId: string
+  seq: number
+}
+
+export interface ChunkFailedData {
+  seq: number
+  error: string
+}
+
+export interface SessionCompletedData {
+  fileId: string
+  url: string
+  totalChunks: number
+  durationMs: number
+  fullTranscript: string
+}
+
+export interface SessionFailedData {
+  error: string
+}
