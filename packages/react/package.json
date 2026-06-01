@@ -1,6 +1,6 @@
 {
   "name": "@jixi/react",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React hooks and provider for Jixi — built on @jixi/js",
   "type": "module",
   "main": "./dist/index.cjs",
