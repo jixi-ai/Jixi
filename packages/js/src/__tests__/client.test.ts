@@ -52,12 +52,25 @@ afterEach(() => {
 })
 
 describe('JixiClient constructor', () => {
-  it('throws TypeError eagerly when no auth is configured', () => {
-    expect(() => new JixiClient({ baseUrl: 'https://api.jixi.ai' })).toThrow(TypeError)
+  it('throws TypeError eagerly with API key setup help when no auth is configured', () => {
+    expect(() => new JixiClient()).toThrow(
+      'JixiClient requires apiKey. Set JIXI_API_KEY in your environment, or get an API key from https://app.jixi.ai/security.',
+    )
   })
 
   it('accepts apiKey', () => {
-    expect(() => new JixiClient({ baseUrl: 'https://api.jixi.ai', apiKey: 'jx_pub_x' })).not.toThrow()
+    expect(() => new JixiClient({ apiKey: 'jx_pub_x' })).not.toThrow()
+  })
+
+  it('defaults baseUrl to the Jixi API', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(makeJsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const client = new JixiClient({ apiKey: 'jx_pub_x' })
+    await client.runWorkflow('foo', {})
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toMatch(/^https:\/\/api\.jixi\.ai\/wf\/foo/)
   })
 
   it('accepts sessionTokenProvider', () => {

@@ -79,7 +79,7 @@ export async function _request<T>(
     try {
       data = JSON.parse(text) as T
     } catch {
-      throw new JixiError('Failed to parse response JSON', 'parse_error', { workflowName, durationMs: ms })
+      data = text as unknown as T
     }
 
     const len = text.length

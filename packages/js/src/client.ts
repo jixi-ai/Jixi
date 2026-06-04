@@ -10,12 +10,14 @@ export class JixiClient {
   private readonly tokenManager: TokenManager
   private readonly config: JixiClientConfig
 
-  constructor(config: JixiClientConfig) {
+  constructor(config: JixiClientConfig = {}) {
     if (!config.apiKey && !config.sessionTokenProvider) {
-      throw new TypeError('JixiClient requires either apiKey or sessionTokenProvider')
+      throw new TypeError(
+        'JixiClient requires apiKey. Set JIXI_API_KEY in your environment, or get an API key from https://app.jixi.ai/security.',
+      )
     }
-    this.config = config
-    this.tokenManager = new TokenManager(config)
+    this.config = { ...config, baseUrl: config.baseUrl ?? 'https://api.jixi.ai' }
+    this.tokenManager = new TokenManager(this.config)
   }
 
   async runWorkflow<TIn, TOut>(
@@ -201,6 +203,6 @@ export class JixiClient {
   }
 
   private _baseUrl(): string {
-    return this.config.baseUrl.replace(/\/$/, '')
+    return this.config.baseUrl!.replace(/\/$/, '')
   }
 }

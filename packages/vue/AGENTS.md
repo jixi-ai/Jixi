@@ -18,6 +18,8 @@ Call once in a parent component (e.g. `App.vue`) to create a `JixiClient` and ma
 
 Uses a `Symbol('jixi')` key internally — do not use `inject` directly; use `injectJixi()`.
 
+Client apps must provide `apiKey`. For Vite, use `import.meta.env.VITE_JIXI_API_KEY`. Create keys at https://app.jixi.ai/security. `baseUrl` defaults to `https://api.jixi.ai`.
+
 ### `injectJixi(): JixiClient`
 
 Retrieves the client from the nearest `provideJixi` ancestor. Throws if called outside a providing ancestor.

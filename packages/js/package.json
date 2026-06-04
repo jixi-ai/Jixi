@@ -1,6 +1,6 @@
 {
   "name": "@jixi/js",
-  "version": "0.1.0",
+  "version": "0.2.3",
   "description": "Jixi core browser client: HTTP, SSE streaming, auth, and workflow execution",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -14,7 +14,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "AGENTS.md"
   ],
   "scripts": {
     "build": "tsup",

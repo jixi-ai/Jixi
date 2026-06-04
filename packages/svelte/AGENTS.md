@@ -17,11 +17,13 @@ Exported from `src/index.ts`.
 Creates a writable Svelte store whose value is a `JixiClient` instance.
 
 ```ts
-const jixiStore = createJixiStore({ baseUrl: 'https://api.jixi.ai', apiKey: '...' })
+const jixiStore = createJixiStore({ apiKey: import.meta.env.VITE_JIXI_API_KEY })
 // Access client: $jixiStore or jixiStore.client
 ```
 
 Returns `{ subscribe, set, client }`.
+
+Client apps must provide `apiKey`. For Vite, use `VITE_JIXI_API_KEY`. Create keys at https://app.jixi.ai/security. `baseUrl` defaults to `https://api.jixi.ai`.
 
 ### `workflowStore<T>()`
 

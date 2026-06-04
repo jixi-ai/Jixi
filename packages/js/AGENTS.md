@@ -29,14 +29,16 @@ class JixiClient {
 
 ```ts
 type JixiClientConfig = {
-  baseUrl: string
-  apiKey?: string                         // one of these required
+  baseUrl?: string                        // default: https://api.jixi.ai
+  apiKey?: string                         // required for client apps
   sessionTokenProvider?: () => Promise<string>
   timeoutMs?: number                      // default: 30_000
   appId?: string                          // required for session token mode
   tokenTtlMs?: number                     // token cache TTL, default: 240_000 (4 min)
 }
 ```
+
+Client apps should pass `apiKey: process.env.JIXI_API_KEY` on the server, `process.env.NEXT_PUBLIC_JIXI_API_KEY` in Next.js client components, or `import.meta.env.VITE_JIXI_API_KEY` in Vite. Create keys at https://app.jixi.ai/security.
 
 ### `RunWorkflowOptions`
 

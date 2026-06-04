@@ -1,7 +1,7 @@
 export type SessionTokenProvider = () => Promise<string>
 
 export type JixiClientConfig = {
-  baseUrl: string
+  baseUrl?: string
   apiKey?: string
   sessionTokenProvider?: SessionTokenProvider
   timeoutMs?: number
@@ -126,6 +126,11 @@ export type AudioStreamOptions = {
   sampleRateHz?: number
   folders?: string[]
   diarize?: boolean
+  /** Map of Deepgram speaker ID (e.g. '0', '1') to display name. Stored in chunk content. */
+  speakerNames?: Record<string, string>
+  /** Boost recognition of domain-specific words/acronyms. Format: ["word:boost", ...]
+   *  where boost is 1–10. Example: ["HbA1c:3", "COPD:2"]. Uses Deepgram keywords API. */
+  keywords?: string[]
   languageHint?: string
   interimResults?: boolean
   autoDeidentify?: boolean

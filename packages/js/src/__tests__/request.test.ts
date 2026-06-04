@@ -28,6 +28,16 @@ function makeJsonFetch(data: unknown, status = 200): ReturnType<typeof vi.fn> {
   } as unknown as Response)
 }
 
+function makeTextFetch(body: string, status = 200): ReturnType<typeof vi.fn> {
+  return vi.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? 'OK' : String(status),
+    headers: new Headers({ 'content-type': 'text/plain' }),
+    text: async () => body,
+  } as unknown as Response)
+}
+
 function makeErrorFetch(status: number, body = ''): ReturnType<typeof vi.fn> {
   return vi.fn().mockResolvedValue({
     ok: false,
@@ -59,6 +69,12 @@ describe('_request', () => {
     vi.stubGlobal('fetch', makeJsonFetch({ answer: 42 }))
     const result = await _request('https://api.test/wf/foo', { method: 'POST', body: '{}' }, baseOpts)
     expect(result).toEqual({ answer: 42 })
+  })
+
+  it('returns plain text as string when response is not JSON', async () => {
+    vi.stubGlobal('fetch', makeTextFetch('Here is your joke!'))
+    const result = await _request<string>('https://api.test/wf/foo', { method: 'POST', body: '{}' }, baseOpts)
+    expect(result).toBe('Here is your joke!')
   })
 
   it('maps 401 to JixiError(auth_failed)', async () => {
