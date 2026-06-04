@@ -12,7 +12,7 @@ import type { ReactNode } from 'react'
 
 export type JixiProviderProps = {
   children: ReactNode
-  baseUrl: string
+  baseUrl?: string
   apiKey?: string
   sessionTokenProvider?: SessionTokenProvider
   appId?: string

@@ -95,7 +95,21 @@ export function useJixiAudioStream(
           case 'transcript_final': {
             setTranscript((prev) => {
               const text = (event.data as { text: string }).text
-              return prev ? prev + '\n' + text : text
+              if (!prev) return text
+              // If the new chunk starts with a speaker label, check whether to merge
+              // with the last line (same speaker continues) or start a new line
+              const newLabelMatch = text.match(/^\[Speaker (\d+)\] (.+)/)
+              if (newLabelMatch) {
+                const prevLines = prev.split('\n')
+                const lastLine = prevLines[prevLines.length - 1]
+                const prevLabelMatch = lastLine.match(/^\[Speaker (\d+)\] /)
+                if (prevLabelMatch && prevLabelMatch[1] === newLabelMatch[1]) {
+                  // Same speaker — merge into the last line without repeating the label
+                  prevLines[prevLines.length - 1] = lastLine + ' ' + newLabelMatch[2]
+                  return prevLines.join('\n')
+                }
+              }
+              return prev + '\n' + text
             })
             setInterimText('')
             break

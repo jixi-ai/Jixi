@@ -1,6 +1,6 @@
 {
   "name": "@jixi/react",
-  "version": "0.2.0",
+  "version": "0.2.3",
   "description": "React hooks and provider for Jixi — built on @jixi/js",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -14,7 +14,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "AGENTS.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -28,7 +29,7 @@
     "@jixi/js": "*"
   },
   "peerDependencies": {
-    "react": "^18.0.0"
+    "react": ">=18.0.0"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.0.0",

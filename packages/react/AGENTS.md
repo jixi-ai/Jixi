@@ -4,7 +4,7 @@
 
 React hooks and provider for Jixi workflows. Wraps `@jixi/js` with React lifecycle integration: manages streaming state, cancels on unmount, and exposes ergonomic hooks for sync and streaming workflow execution.
 
-**Requires React 18+. Client components only — not compatible with React Server Components.**
+**Requires React 18 or newer. Client components only — not compatible with React Server Components.**
 
 This package never reimplements wire protocol, SSE parsing, token management, or error handling. All of that lives in `@jixi/js`.
 
@@ -18,18 +18,18 @@ Wrap your app (or a subtree) once. Creates a single `JixiClient` and stores it i
 
 ```tsx
 <JixiProvider
-  baseUrl="https://api.jixi.ai"
   appId="ak_app_123"
-  apiKey={process.env.NEXT_PUBLIC_JIXI_KEY}
-  // OR: sessionTokenProvider={async () => fetch('/api/jixi/session').then(r => r.json()).then(j => j.token)}
+  apiKey={process.env.NEXT_PUBLIC_JIXI_API_KEY}
 >
   {children}
 </JixiProvider>
 ```
 
-Props (`JixiProviderProps`): `children`, `baseUrl`, `apiKey?`, `sessionTokenProvider?`, `appId?`, `timeoutMs?`, `tokenTtlMs?`.
+Props (`JixiProviderProps`): `children`, `baseUrl?`, `apiKey?`, `appId?`, `timeoutMs?`, `tokenTtlMs?`. `baseUrl` defaults to `https://api.jixi.ai`.
 
-Client is created via `useMemo` keyed on all config props. In practice it is created once per app lifetime — env vars and static functions don't change. If `sessionTokenProvider` is defined inline in JSX it will recreate the client on every parent render; the caller must memoize it.
+Client apps must provide `apiKey`. For Next.js client components, use `NEXT_PUBLIC_JIXI_API_KEY`. For Vite, use `VITE_JIXI_API_KEY`. Create keys at https://app.jixi.ai/security.
+
+Client is created via `useMemo` keyed on all config props. In practice it is created once per app lifetime because env vars and static functions do not change.
 
 ### `useJixiClient(): JixiClient`
 
@@ -223,7 +223,6 @@ Uses `@testing-library/react` with `vi.mock('@jixi/js')`. Fake `JixiStream` inst
 - **Client components only** — hooks use `useEffect`, `useCallback`, `useRef`. No RSC support.
 - **React 18+ only** — no compatibility shims for React 17.
 - **`useJixiTextStream` is text-only** — audio chunks are silently ignored. For audio, use `useJixiStream` and handle `content_chunk` events with `contentType === 'audio'` directly.
-- **Inline `sessionTokenProvider` recreates client** — if the provider function is defined inline in JSX, `useMemo` detects a new reference on each render and creates a new `JixiClient`. Define it outside the component or memoize it with `useCallback`.
 - **No cross-instance deduplication** — two components calling the same workflow each manage independent state.
 - **`workflow_failed` is an event, not an error** — `useJixiStream` sets `isStreaming=false` and `error` from the event's `data.error` string. It is not thrown by `@jixi/js`.
 
