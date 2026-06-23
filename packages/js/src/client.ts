@@ -1,10 +1,24 @@
 import { TokenManager } from './token-manager'
 import { _request } from './request'
-import { createJixiStream } from './stream'
+import { createEventStream, createJixiStream, type EventStreamOptions } from './stream'
 import { JixiError } from './errors'
 import { AudioStream } from './audio-stream'
+import { AudioHttpStream } from './audio-http-stream'
 import type { JixiClientConfig, RunWorkflowOptions, AudioStreamOptions, AudioStreamEvent } from './types'
 import type { JixiStream } from './stream'
+
+export interface AudioSessionEventStream extends AsyncIterable<AudioStreamEvent> {
+  readonly sessionId: string
+  cancel(): void
+}
+
+type AudioSessionResponse = {
+  sessionId: string
+  fileId: string
+  ingestUrl: string
+  finalizeUrl: string
+  eventsUrl: string
+}
 
 export class JixiClient {
   private readonly tokenManager: TokenManager
@@ -85,30 +99,101 @@ export class JixiClient {
       }
     }
 
-    const eventsUrl = `${this._baseUrl()}/wf/${workflowName}/runs/${runId}/events`
-    const response = await fetch(eventsUrl, {
-      headers: {
-        'Accept': 'text/event-stream',
-        'Authorization': `Bearer ${token}`,
-      },
-      signal: options?.signal,
-    })
-
-    if (!response.ok) {
-      const code = response.status === 401 ? 'auth_failed'
-        : response.status >= 500 ? 'server_error'
-        : 'unknown'
-      throw new JixiError(
-        `Events request failed: ${response.status} ${response.statusText}`,
-        code,
-        { status: response.status, workflowName, runId }
-      )
-    }
-
-    return createJixiStream(runId, response)
+    return this._getWorkflowRunEventsWithToken(workflowName, runId, token, options)
   }
 
-  async startAudioStream(appId: string, options?: AudioStreamOptions): Promise<AudioStream> {
+  async getWorkflowRunEvents(
+    workflowName: string,
+    runId: string,
+    options?: RunWorkflowOptions & EventStreamOptions,
+  ): Promise<JixiStream> {
+    const token = await this.tokenManager.getToken()
+    return this._getWorkflowRunEventsWithToken(workflowName, runId, token, options)
+  }
+
+  async startAudioStream(appId: string, options?: AudioStreamOptions & { transport?: 'websocket' }): Promise<AudioStream>
+  async startAudioStream(appId: string, options: AudioStreamOptions & { transport: 'http' }): Promise<AudioHttpStream>
+  async startAudioStream(appId: string, options: AudioStreamOptions & { transport: 'auto' }): Promise<AudioStream | AudioHttpStream>
+  async startAudioStream(appId: string, options?: AudioStreamOptions): Promise<AudioStream | AudioHttpStream>
+  async startAudioStream(appId: string, options?: AudioStreamOptions): Promise<AudioStream | AudioHttpStream> {
+    const transport = options?.transport ?? 'websocket'
+    if (transport === 'http') return this.startAudioStreamHttp(appId, options)
+
+    try {
+      return await this._startAudioStreamWebSocket(appId, options)
+    } catch (err) {
+      if (transport !== 'auto') throw err
+      return this.startAudioStreamHttp(appId, options)
+    }
+  }
+
+  async startAudioStreamHttp(
+    appId: string,
+    options?: AudioStreamOptions & EventStreamOptions,
+  ): Promise<AudioHttpStream> {
+    const token = await this.tokenManager.getToken()
+    const {
+      transport: _transport,
+      signal: _signal,
+      dedupe: _dedupe,
+      lastSeenSeq: _lastSeenSeq,
+      ...sessionOptions
+    } = options ?? {}
+    const session = await _request<AudioSessionResponse>(
+      `${this._baseUrl()}/applications/${appId}/aiStream/audio/sessions`,
+      { method: 'POST', body: JSON.stringify(sessionOptions) },
+      {
+        workflowName: `audio:${appId}`,
+        timeoutMs: this.config.timeoutMs ?? 30_000,
+        externalSignal: options?.signal,
+        token,
+      },
+    )
+
+    const response = await this._fetchEventStream(
+      this._absoluteUrl(session.eventsUrl),
+      token,
+      options?.signal,
+      { workflowName: `audio:${appId}`, sessionId: session.sessionId },
+    )
+
+    return new AudioHttpStream(
+      {
+        appId,
+        baseUrl: this._baseUrl(),
+        getToken: () => this.tokenManager.getToken(),
+        invalidateToken: () => this.tokenManager.invalidate(),
+        timeoutMs: this.config.timeoutMs ?? 30_000,
+        signal: options?.signal,
+        ...session,
+      },
+      response,
+      options,
+    )
+  }
+
+  async getAudioSessionEvents(
+    appId: string,
+    sessionId: string,
+    options?: Pick<AudioStreamOptions, 'signal'> & EventStreamOptions,
+  ): Promise<AudioSessionEventStream> {
+    const token = await this.tokenManager.getToken()
+    const response = await this._fetchEventStream(
+      `${this._baseUrl()}/applications/${appId}/aiStream/audio/sessions/${sessionId}/events`,
+      token,
+      options?.signal,
+      { workflowName: `audio:${appId}`, sessionId },
+    )
+    const events = createEventStream<AudioStreamEvent>(response, options)
+
+    return {
+      sessionId,
+      cancel: () => events.cancel(),
+      [Symbol.asyncIterator]: () => events[Symbol.asyncIterator](),
+    }
+  }
+
+  private async _startAudioStreamWebSocket(appId: string, options?: AudioStreamOptions): Promise<AudioStream> {
     if (typeof WebSocket === 'undefined') {
       throw new JixiError(
         'WebSocket is not available. Audio streaming requires a WebSocket-capable environment.',
@@ -132,7 +217,8 @@ export class JixiClient {
       }
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'start', ...options }))
+        const { transport: _transport, signal: _signal, ...startOptions } = options ?? {}
+        ws.send(JSON.stringify({ type: 'start', ...startOptions }))
       }
 
       ws.onmessage = (ev: MessageEvent) => {
@@ -190,6 +276,7 @@ export class JixiClient {
     if (options?.environment) url.searchParams.set('environment', options.environment)
     if (options?.versionId) url.searchParams.set('versionId', options.versionId)
     if (options?.draft) url.searchParams.set('draft', 'true')
+    if (options?.force) url.searchParams.set('force', 'true')
     return url.toString()
   }
 
@@ -204,5 +291,53 @@ export class JixiClient {
 
   private _baseUrl(): string {
     return this.config.baseUrl!.replace(/\/$/, '')
+  }
+
+  private async _getWorkflowRunEventsWithToken(
+    workflowName: string,
+    runId: string,
+    token: string,
+    options?: RunWorkflowOptions & EventStreamOptions,
+  ): Promise<JixiStream> {
+    const response = await this._fetchEventStream(
+      `${this._baseUrl()}/wf/${workflowName}/runs/${runId}/events`,
+      token,
+      options?.signal,
+      { workflowName, runId },
+    )
+    return createJixiStream(runId, response, options)
+  }
+
+  private async _fetchEventStream(
+    url: string,
+    token: string,
+    signal: AbortSignal | undefined,
+    context: { workflowName?: string; runId?: string; sessionId?: string },
+  ): Promise<Response> {
+    const response = await fetch(url, {
+      headers: {
+        'Accept': 'text/event-stream',
+        'Authorization': `Bearer ${token}`,
+      },
+      signal,
+    })
+
+    if (!response.ok) {
+      const code = response.status === 401 ? 'auth_failed'
+        : response.status >= 500 ? 'server_error'
+        : 'unknown'
+      throw new JixiError(
+        `Events request failed: ${response.status} ${response.statusText}`,
+        code,
+        { status: response.status, workflowName: context.workflowName, runId: context.runId },
+      )
+    }
+
+    return response
+  }
+
+  private _absoluteUrl(pathOrUrl: string): string {
+    if (/^https?:\/\//.test(pathOrUrl)) return pathOrUrl
+    return `${this._baseUrl()}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`
   }
 }

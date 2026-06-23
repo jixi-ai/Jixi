@@ -1,8 +1,8 @@
-import { JixiClient, type JixiConfig } from '@jixi/js'
+import { JixiClient, type JixiClientConfig } from '@jixi/js'
 import type { SessionOptions } from './types'
 import { createSessionToken } from './session'
 
-export interface JixiNodeConfig extends JixiConfig {
+export interface JixiNodeConfig extends JixiClientConfig {
   secret?: string
 }
 

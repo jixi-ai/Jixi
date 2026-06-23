@@ -43,6 +43,7 @@ export async function _request<T>(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
+    ...(init.headers as Record<string, string> | undefined),
   }
 
   try {

@@ -13,6 +13,7 @@ export type RunWorkflowOptions = {
   environment?: string
   versionId?: string
   draft?: boolean
+  force?: boolean
   signal?: AbortSignal
 }
 
@@ -121,6 +122,10 @@ export interface AudioStreamEvent {
 }
 
 export type AudioStreamOptions = {
+  transport?: 'websocket' | 'http' | 'auto'
+  signal?: AbortSignal
+  lastSeenSeq?: number
+  dedupe?: boolean
   name?: string
   encoding?: 'linear16' | 'opus' | 'webm' | 'mulaw' | 'flac'
   sampleRateHz?: number

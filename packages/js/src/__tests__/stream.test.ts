@@ -62,7 +62,7 @@ describe('createJixiStream', () => {
     const events: WorkflowRunEvent[] = []
     for await (const event of stream) events.push(event)
     expect(events).toHaveLength(2)
-    expect(events.every(e => e.type !== 'heartbeat')).toBe(true)
+    expect(events.every(e => (e.type as string) !== 'heartbeat')).toBe(true)
   })
 
   it('cancel() can be called without throwing', () => {

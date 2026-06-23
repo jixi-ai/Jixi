@@ -1,5 +1,6 @@
 import type {
   JixiError,
+  EventStreamOptions,
   RunWorkflowOptions,
   WorkflowRunEvent,
   WorkflowRunEventType,
@@ -30,6 +31,17 @@ export type JixiWorkflowResult<TIn, TOut> = {
 
 export type JixiStreamResult<TIn> = {
   run: (input: TIn) => Promise<void>
+  events: WorkflowRunEvent[]
+  latestMessage: string | null
+  contentChunks: ContentChunkData[]
+  isStreaming: boolean
+  isComplete: boolean
+  error: JixiError | null
+  reset: () => void
+  cancel: () => void
+}
+
+export type JixiRunEventsResult = {
   events: WorkflowRunEvent[]
   latestMessage: string | null
   contentChunks: ContentChunkData[]
@@ -79,4 +91,17 @@ export type JixiAudioStreamResult = {
   error: JixiError | null
 }
 
-export type { AudioStreamEvent, AudioStreamOptions }
+export type JixiAudioSessionEventsResult = {
+  events: AudioStreamEvent[]
+  transcript: string
+  interimText: string
+  sessionId: string | null
+  fileId: string | null
+  isStreaming: boolean
+  isComplete: boolean
+  error: JixiError | null
+  reset: () => void
+  cancel: () => void
+}
+
+export type { AudioStreamEvent, AudioStreamOptions, EventStreamOptions }

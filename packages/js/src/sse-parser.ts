@@ -1,10 +1,10 @@
 import { JixiError } from './errors'
 import type { WorkflowRunEvent, HeartbeatEvent } from './types'
 
-export async function* parseSSEStream(
+export async function* parseSSEStream<TEvent = WorkflowRunEvent>(
   body: ReadableStream<Uint8Array>,
   signal?: AbortSignal
-): AsyncIterable<WorkflowRunEvent | HeartbeatEvent> {
+): AsyncIterable<TEvent | HeartbeatEvent> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -35,7 +35,7 @@ export async function* parseSSEStream(
 
       for (const frame of frames) {
         const event = parseFrame(frame)
-        if (event) yield event
+        if (event) yield event as TEvent | HeartbeatEvent
       }
     }
 
@@ -43,7 +43,7 @@ export async function* parseSSEStream(
     const tail = buffer + decoder.decode()
     if (tail.trim()) {
       const event = parseFrame(tail)
-      if (event) yield event
+      if (event) yield event as TEvent | HeartbeatEvent
     }
   } catch (err) {
     if (err instanceof JixiError) throw err

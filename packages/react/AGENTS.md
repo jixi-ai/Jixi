@@ -78,9 +78,22 @@ const { run, event, isStreaming, error, reset, cancel } =
 
 - `event` — `WorkflowRunEvent | null`; the most recent event matching `eventType`
 
+### `useJixiRunEvents(workflowName, runId, options?)`
+
+Attaches to an existing workflow run SSE stream without starting a new run.
+
+```ts
+const { events, latestMessage, contentChunks, isStreaming, isComplete, error, reset, cancel } =
+  useJixiRunEvents('my_workflow', runId)
+```
+
+- `runId` may be `null`/`undefined`; the hook stays reset until a value is supplied.
+- Replayed events are deduped by `seq`.
+- Unmount cancels the active SSE stream automatically.
+
 ### `useJixiAudioStream(appId, options?)`
 
-Live audio streaming session. Manages WebSocket lifecycle and surfaces transcript events as React state. The caller is responsible for capturing audio (e.g. via `MediaRecorder`) and piping it in via `sendAudio`.
+Live audio streaming session. Manages transport lifecycle and surfaces transcript events as React state. Defaults to WebSocket; pass `transport: 'http'` for HTTP/SSE fallback or `transport: 'auto'` to try WebSocket first. The caller is responsible for capturing audio (e.g. via `MediaRecorder`) and piping it in via `sendAudio`.
 
 ```ts
 const {
@@ -124,6 +137,19 @@ const handleStop = () => {
 - `interimText` reflects the latest `transcript_interim` text; cleared to `''` on each `transcript_final` and `session_completed`.
 - `finalize()` sets `isStreaming = false` immediately (caller has stopped sending) but the for-await loop continues until `session_completed` arrives and `isComplete` flips to `true`.
 - Unmount cancels any active stream automatically.
+
+### `useJixiAudioSessionEvents(appId, sessionId, options?)`
+
+Attaches to an existing audio session SSE stream without creating a new session.
+
+```ts
+const { events, transcript, interimText, fileId, isStreaming, isComplete, error, reset, cancel } =
+  useJixiAudioSessionEvents(appId, sessionId)
+```
+
+- `sessionId` may be `null`/`undefined`; the hook stays reset until a value is supplied.
+- Replayed events are deduped by `seq`.
+- Transcript aggregation matches `useJixiAudioStream`.
 
 ### `useJixiTextStream<TIn>(workflowName, options?)`
 
@@ -214,7 +240,7 @@ npm run test:watch    # interactive watch mode
 npm run typecheck     # tsc --noEmit
 ```
 
-Five test files in `src/__tests__/`: `context`, `use-jixi-workflow`, `use-jixi-stream`, `use-jixi-event-stream`, `use-jixi-text-stream`.
+Six test files in `src/__tests__/`: `context`, `use-jixi-workflow`, `use-jixi-stream`, `use-jixi-event-stream`, `use-jixi-text-stream`, `stream-attach-hooks`.
 
 Uses `@testing-library/react` with `vi.mock('@jixi/js')`. Fake `JixiStream` instances are implemented as async generators in tests. Mock `JixiClient` is configured per test to return specific event sequences.
 

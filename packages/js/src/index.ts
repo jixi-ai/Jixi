@@ -1,8 +1,10 @@
 export { JixiClient } from './client'
 export { JixiError } from './errors'
 export { AudioStream } from './audio-stream'
+export { AudioHttpStream } from './audio-http-stream'
 export type { JixiErrorCode } from './errors'
-export type { JixiStream } from './stream'
+export type { AudioSessionEventStream } from './client'
+export type { EventStream, EventStreamOptions, JixiStream } from './stream'
 export type {
   JixiClientConfig,
   RunWorkflowOptions,

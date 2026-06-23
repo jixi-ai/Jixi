@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { JixiError } from '@jixi/js'
-import type { AudioStream, AudioStreamEvent, AudioStreamOptions } from '@jixi/js'
+import type { AudioHttpStream, AudioStream, AudioStreamEvent, AudioStreamOptions } from '@jixi/js'
 import { useJixiClient } from './context'
 import type { JixiAudioStreamResult } from './types'
+import { applyAudioEvent } from './use-jixi-audio-session-events'
 
 export function useJixiAudioStream(
   appId: string,
@@ -22,7 +23,8 @@ export function useJixiAudioStream(
   const optionsRef = useRef(options)
   optionsRef.current = options
 
-  const streamRef = useRef<AudioStream | null>(null)
+  const streamRef = useRef<AudioStream | AudioHttpStream | null>(null)
+  const lastSeqRef = useRef(options?.lastSeenSeq ?? -1)
 
   useEffect(() => {
     return () => {
@@ -39,6 +41,7 @@ export function useJixiAudioStream(
   const reset = useCallback(() => {
     streamRef.current?.cancel()
     streamRef.current = null
+    lastSeqRef.current = optionsRef.current?.lastSeenSeq ?? -1
     setEvents([])
     setTranscript('')
     setInterimText('')
@@ -77,62 +80,15 @@ export function useJixiAudioStream(
     try {
       const stream = await client.startAudioStream(appId, optionsRef.current)
       streamRef.current = stream
+      lastSeqRef.current = optionsRef.current?.lastSeenSeq ?? -1
 
       for await (const event of stream) {
-        setEvents((prev) => [...prev, event])
+        if (event.seq <= lastSeqRef.current) continue
+        lastSeqRef.current = event.seq
 
-        switch (event.type) {
-          case 'session_started': {
-            const data = event.data as { fileId: string }
-            setSessionId(event.sessionId)
-            setFileId(data.fileId)
-            break
-          }
-          case 'transcript_interim': {
-            setInterimText((event.data as { text: string }).text)
-            break
-          }
-          case 'transcript_final': {
-            setTranscript((prev) => {
-              const text = (event.data as { text: string }).text
-              if (!prev) return text
-              // If the new chunk starts with a speaker label, check whether to merge
-              // with the last line (same speaker continues) or start a new line
-              const newLabelMatch = text.match(/^\[Speaker (\d+)\] (.+)/)
-              if (newLabelMatch) {
-                const prevLines = prev.split('\n')
-                const lastLine = prevLines[prevLines.length - 1]
-                const prevLabelMatch = lastLine.match(/^\[Speaker (\d+)\] /)
-                if (prevLabelMatch && prevLabelMatch[1] === newLabelMatch[1]) {
-                  // Same speaker — merge into the last line without repeating the label
-                  prevLines[prevLines.length - 1] = lastLine + ' ' + newLabelMatch[2]
-                  return prevLines.join('\n')
-                }
-              }
-              return prev + '\n' + text
-            })
-            setInterimText('')
-            break
-          }
-          case 'session_completed': {
-            setInterimText('')
-            setIsStreaming(false)
-            setIsComplete(true)
-            break
-          }
-          case 'session_failed': {
-            setIsStreaming(false)
-            setError(
-              new JixiError(
-                ((event.data as { error?: string }).error) ?? 'session_failed',
-                'server_error',
-              ),
-            )
-            break
-          }
-          default:
-            break
-        }
+        setEvents((prev) => [...prev, event])
+        setSessionId(event.sessionId)
+        applyAudioEvent(event, setTranscript, setInterimText, setFileId, setIsStreaming, setIsComplete, setError)
       }
     } catch (err) {
       if (err instanceof JixiError && err.code === 'aborted') return

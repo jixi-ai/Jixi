@@ -270,3 +270,122 @@ describe('JixiClient.runWorkflowStream', () => {
     ])
   })
 })
+
+describe('JixiClient streaming attach helpers', () => {
+  it('sends force=true on workflow requests', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(makeJsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const client = new JixiClient({ baseUrl: 'https://api.jixi.ai', apiKey: 'jx' })
+    await client.runWorkflow('foo', {}, { force: true })
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toContain('force=true')
+  })
+
+  it('attaches to an existing workflow run event stream and dedupes replay', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(makeSseResponse([
+      sseFrame({ type: 'workflow_started', runId: 'run-5', seq: 0, timestamp: 't' }),
+      sseFrame({ type: 'workflow_started', runId: 'run-5', seq: 0, timestamp: 't' }),
+      sseFrame({ type: 'workflow_completed', runId: 'run-5', seq: 1, timestamp: 't' }),
+    ]))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const client = new JixiClient({ baseUrl: 'https://api.jixi.ai', apiKey: 'jx' })
+    const stream = await client.getWorkflowRunEvents('my_flow', 'run-5')
+
+    const [url, init] = mockFetch.mock.calls[0]
+    expect(url).toBe('https://api.jixi.ai/wf/my_flow/runs/run-5/events')
+    expect(init.headers['Accept']).toBe('text/event-stream')
+
+    const events = []
+    for await (const event of stream) events.push(event)
+    expect(events.map((event) => event.seq)).toEqual([0, 1])
+  })
+})
+
+describe('JixiClient.startAudioStreamHttp', () => {
+  it('creates a session, uploads chunks, finalizes, and yields SSE events', async () => {
+    const startedEvent = {
+      type: 'session_started',
+      sessionId: 'sess-1',
+      seq: 0,
+      timestamp: 't',
+      data: { fileId: 'file-1' },
+    }
+    const completedEvent = {
+      type: 'session_completed',
+      sessionId: 'sess-1',
+      seq: 1,
+      timestamp: 't',
+      data: { fileId: 'file-1' },
+    }
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce(makeJsonResponse({
+        sessionId: 'sess-1',
+        fileId: 'file-1',
+        ingestUrl: '/applications/app-1/aiStream/audio/sessions/sess-1/chunks',
+        finalizeUrl: '/applications/app-1/aiStream/audio/sessions/sess-1/finalize',
+        eventsUrl: '/applications/app-1/aiStream/audio/sessions/sess-1/events',
+      }, 201))
+      .mockResolvedValueOnce(makeSseResponse([
+        sseFrame(startedEvent),
+        sseFrame({ type: 'heartbeat', sessionId: 'sess-1' }),
+        sseFrame(completedEvent),
+      ]))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(makeJsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const client = new JixiClient({ baseUrl: 'https://api.jixi.ai', apiKey: 'jwt' })
+    const stream = await client.startAudioStreamHttp('app-1', {
+      name: 'meeting.webm',
+      encoding: 'webm',
+      sampleRateHz: 48000,
+    })
+
+    expect(stream.sessionId).toBe('sess-1')
+    expect(stream.fileId).toBe('file-1')
+
+    await stream.sendAudio(new Uint8Array([1, 2, 3]))
+    await stream.finalize()
+
+    const [sessionUrl, sessionInit] = mockFetch.mock.calls[0]
+    expect(sessionUrl).toBe('https://api.jixi.ai/applications/app-1/aiStream/audio/sessions')
+    expect(JSON.parse(sessionInit.body)).toMatchObject({ name: 'meeting.webm', encoding: 'webm' })
+
+    const [eventsUrl, eventsInit] = mockFetch.mock.calls[1]
+    expect(eventsUrl).toBe('https://api.jixi.ai/applications/app-1/aiStream/audio/sessions/sess-1/events')
+    expect(eventsInit.headers['Accept']).toBe('text/event-stream')
+
+    const [chunkUrl, chunkInit] = mockFetch.mock.calls[2]
+    expect(chunkUrl).toBe('https://api.jixi.ai/applications/app-1/aiStream/audio/sessions/sess-1/chunks')
+    expect(chunkInit.method).toBe('POST')
+    expect(chunkInit.headers['Content-Type']).toBe('application/octet-stream')
+
+    const [finalizeUrl, finalizeInit] = mockFetch.mock.calls[3]
+    expect(finalizeUrl).toBe('https://api.jixi.ai/applications/app-1/aiStream/audio/sessions/sess-1/finalize')
+    expect(finalizeInit.method).toBe('POST')
+
+    const events = []
+    for await (const event of stream) events.push(event)
+    expect(events).toEqual([startedEvent, completedEvent])
+  })
+
+  it('attaches to audio session events', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(makeSseResponse([
+      sseFrame({ type: 'session_started', sessionId: 'sess-2', seq: 0, timestamp: 't' }),
+    ]))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const client = new JixiClient({ baseUrl: 'https://api.jixi.ai', apiKey: 'jwt' })
+    const stream = await client.getAudioSessionEvents('app-1', 'sess-2')
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toBe('https://api.jixi.ai/applications/app-1/aiStream/audio/sessions/sess-2/events')
+
+    const events = []
+    for await (const event of stream) events.push(event)
+    expect(events).toHaveLength(1)
+  })
+})

@@ -17,13 +17,19 @@ class JixiClient {
   constructor(config: JixiClientConfig)
   runWorkflow<TIn, TOut>(name: string, input: TIn, options?: RunWorkflowOptions): Promise<TOut>
   runWorkflowStream<TIn>(name: string, input: TIn, options?: RunWorkflowOptions): Promise<JixiStream>
-  startAudioStream(appId: string, options?: AudioStreamOptions): Promise<AudioStream>
+  getWorkflowRunEvents(name: string, runId: string, options?: RunWorkflowOptions & EventStreamOptions): Promise<JixiStream>
+  startAudioStream(appId: string, options?: AudioStreamOptions): Promise<AudioStream | AudioHttpStream>
+  startAudioStreamHttp(appId: string, options?: AudioStreamOptions & EventStreamOptions): Promise<AudioHttpStream>
+  getAudioSessionEvents(appId: string, sessionId: string, options?: { signal?: AbortSignal } & EventStreamOptions): Promise<AudioSessionEventStream>
 }
 ```
 
 - **`runWorkflow`** — synchronous execution; waits for the full workflow result. `POST /wf/:name`.
 - **`runWorkflowStream`** — streaming execution via 2-step SSE protocol. Returns a `JixiStream`.
-- **`startAudioStream`** — opens a live audio streaming session over WebSocket. Resolves after `session_started` is received. Returns an `AudioStream` with `sessionId` and `fileId` already set.
+- **`getWorkflowRunEvents`** — attaches to an existing workflow run SSE stream and replays buffered events.
+- **`startAudioStream`** — opens a live audio streaming session. Defaults to WebSocket; can use HTTP/SSE with `transport: 'http'` or startup fallback with `transport: 'auto'`.
+- **`startAudioStreamHttp`** — creates an HTTP fallback audio session, uploads chunks with POST, and receives events over SSE.
+- **`getAudioSessionEvents`** — attaches to an existing audio session SSE stream and replays buffered events.
 
 ### `JixiClientConfig`
 
@@ -47,13 +53,14 @@ type RunWorkflowOptions = {
   environment?: string   // workflow version alias
   versionId?: string     // pin to a specific compiled version
   draft?: boolean        // run draft (unversioned) actions
+  force?: boolean        // force recompilation
   signal?: AbortSignal   // caller-controlled cancellation
 }
 ```
 
 ### `AudioStream`
 
-Returned by `startAudioStream`. Async iterable of `AudioStreamEvent`. Wraps a WebSocket connection.
+Returned by `startAudioStream` when using the default WebSocket transport. Async iterable of `AudioStreamEvent`. Wraps a WebSocket connection.
 
 ```ts
 class AudioStream implements AsyncIterable<AudioStreamEvent> {
@@ -63,6 +70,22 @@ class AudioStream implements AsyncIterable<AudioStreamEvent> {
   flush(): void          // send { type: 'flush' } — ask Deepgram to finalise pending transcript
   finalize(): void       // send { type: 'close' } — end recording; iterator continues until session_completed/failed
   cancel(): void         // close WebSocket with code 1000; iterator completes immediately
+}
+```
+
+### `AudioHttpStream`
+
+Returned by `startAudioStreamHttp` or `startAudioStream(..., { transport: 'http' })`.
+Async iterable of `AudioStreamEvent`. Uses HTTP chunk upload plus SSE events.
+
+```ts
+class AudioHttpStream implements AsyncIterable<AudioStreamEvent> {
+  sessionId: string
+  fileId: string
+  sendAudio(buf: ArrayBuffer | Uint8Array): Promise<void>
+  flush(): void          // no-op for HTTP fallback; finalize drains pending segments
+  finalize(): Promise<void>
+  cancel(): void
 }
 ```
 
@@ -178,7 +201,17 @@ interface ContentChunkData {
 1. `POST /wf/:name/stream` with JSON body → `{ runId: string }`
 2. `GET /wf/:name/runs/:runId/events` with `Accept: text/event-stream` → SSE stream
 
-Query params (`environment`, `versionId`, `draft`) go on both requests. Base URL trailing slashes are stripped before building paths.
+Query params (`environment`, `versionId`, `draft`, `force`) go on workflow requests. Base URL trailing slashes are stripped before building paths.
+
+**Workflow attach:** `GET /wf/:name/runs/:runId/events` returns the same SSE event stream without starting a new run.
+
+**Audio WebSocket:** `ws(s)://host/applications/:appId/aiStream/audio?token=<jwt>` sends a `start` frame followed by binary audio frames.
+
+**Audio HTTP fallback:**
+1. `POST /applications/:appId/aiStream/audio/sessions` → session URLs
+2. `POST /applications/:appId/aiStream/audio/sessions/:sessionId/chunks` with `application/octet-stream`
+3. `POST /applications/:appId/aiStream/audio/sessions/:sessionId/finalize`
+4. `GET /applications/:appId/aiStream/audio/sessions/:sessionId/events` with `Accept: text/event-stream`
 
 ## Internal Patterns — Follow These When Modifying
 
@@ -247,11 +280,11 @@ Six test files in `src/__tests__/`: `errors`, `token-manager`, `request`, `sse-p
 
 - **No `AbortSignal.any()`** — not supported in all target environments. Use manual `addEventListener('abort', ...)` pattern.
 - **No `EventSource`** — cannot send `Authorization` header. Always use `fetch` + `ReadableStream` for SSE.
-- **No auto-reconnect** — if SSE drops mid-stream, `JixiStream` throws `stream_interrupted`. `runId` is on the stream for manual reconnect (future API).
+- **No auto-reconnect loop** — if SSE drops mid-stream, `JixiStream` throws `stream_interrupted`. Use `getWorkflowRunEvents()` or `getAudioSessionEvents()` with `lastSeenSeq` to manually reconnect and dedupe replay.
 - **`workflow_failed` is not thrown** — it is yielded as a normal event. Only transport-level failures throw `JixiError`.
 - **Heartbeats are filtered** — `{ type: 'heartbeat' }` frames are consumed in `stream.ts` and never reach callers or framework wrappers.
 - **Logging is always on in v1** — no `debug: false` config option yet.
-- **`content_chunk` has no replay** — a subscriber that connects after chunks have been sent will not receive them. The final assembled value is in `step_completed.data`.
+- **Replay is transport-buffer dependent** — workflow and audio attach helpers consume whatever the server still has buffered and drop duplicate `seq` values by default.
 - **Base URL** — constructor strips trailing slash; don't add it again when building paths.
 - **No WebSocket in Node.js < 22** — `startAudioStream()` throws a `JixiError` with `code: 'unknown'` if `typeof WebSocket === 'undefined'`. Use Node.js 22+ or provide a WebSocket polyfill. Audio streaming is primarily a browser use case.
 - **`finalize()` does not close the WebSocket** — it sends a `{ type: 'close' }` text frame. The WebSocket stays open until the server sends `session_completed` and closes the connection. The iterator completes naturally.
@@ -261,9 +294,7 @@ Six test files in `src/__tests__/`: `errors`, `token-manager`, `request`, `sse-p
 
 - File upload (multipart/form-data workflow inputs)
 - Run history API (`GET /applications/:appId/workflows/:workflowId/runs`)
-- Automatic SSE reconnect with seq-based deduplication
-- `resumeWorkflowStream(runId, lastSeenSeq)` for manual reconnect
-- HTTP/SSE fallback transport for audio streaming (WebSocket only for now)
+- Automatic SSE reconnect loop
 - Request interceptors or middleware pattern
 - Metrics or telemetry hooks
 - `debug: false` config option

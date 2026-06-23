@@ -6,12 +6,24 @@ export interface JixiStream extends AsyncIterable<WorkflowRunEvent> {
   cancel(): void
 }
 
-export function createJixiStream(runId: string, response: Response): JixiStream {
+export type EventStreamOptions = {
+  lastSeenSeq?: number
+  dedupe?: boolean
+}
+
+export interface EventStream<TEvent extends { type: string; seq?: number }> extends AsyncIterable<TEvent> {
+  cancel(): void
+}
+
+export function createEventStream<TEvent extends { type: string; seq?: number }>(
+  response: Response,
+  options: EventStreamOptions = {},
+): EventStream<TEvent> {
   const ctrl = new AbortController()
+  let lastSeenSeq = options.lastSeenSeq ?? -1
+  const dedupe = options.dedupe !== false
 
   return {
-    runId,
-
     cancel() {
       ctrl.abort()
     },
@@ -24,11 +36,30 @@ export function createJixiStream(runId: string, response: Response): JixiStream 
       }
 
       return (async function* () {
-        for await (const event of parseSSEStream(body, ctrl.signal)) {
+        for await (const event of parseSSEStream<TEvent>(body, ctrl.signal)) {
           if (event.type === 'heartbeat') continue
-          yield event as WorkflowRunEvent
+          const streamEvent = event as TEvent
+          if (dedupe && typeof streamEvent.seq === 'number') {
+            if (streamEvent.seq <= lastSeenSeq) continue
+            lastSeenSeq = streamEvent.seq
+          }
+          yield streamEvent
         }
       })()
     },
+  }
+}
+
+export function createJixiStream(
+  runId: string,
+  response: Response,
+  options?: EventStreamOptions,
+): JixiStream {
+  const events = createEventStream<WorkflowRunEvent>(response, options)
+
+  return {
+    runId,
+    cancel: () => events.cancel(),
+    [Symbol.asyncIterator]: () => events[Symbol.asyncIterator](),
   }
 }
