@@ -187,3 +187,92 @@ export interface SessionCompletedData {
 export interface SessionFailedData {
   error: string
 }
+
+// ─── File Types ──────────────────────────────────────────────────────────────
+
+export type JixiFileType = 'File' | 'Folder'
+export type JixiFileStatus = 'Processing' | 'Ready' | 'Failed'
+
+export interface JixiFile {
+  _id?: string
+  id?: string
+  name: string
+  type: JixiFileType
+  parent?: string
+  url?: string
+  createdAt?: string
+  updatedAt?: string
+  size?: number
+  status?: JixiFileStatus
+  folders?: string[]
+  source?: string
+  [key: string]: unknown
+}
+
+export interface CreateFileInput {
+  name: string
+  type: JixiFileType
+  parent?: string
+  url?: string
+  status?: JixiFileStatus
+  size?: number
+  folders?: string[]
+}
+
+export type UpdateFileInput = Partial<CreateFileInput>
+
+export interface WriteFileInput {
+  filePath: string
+  content: unknown
+  allowOverwrite?: boolean
+  fromUrl?: boolean
+  waitForIngest?: boolean
+}
+
+export interface UploadFileOptions {
+  filename?: string
+}
+
+export interface FileDownloadUrlOptions {
+  disposition?: 'inline' | 'attachment'
+  filename?: string
+  expiresIn?: number
+}
+
+export interface FileFrameUrlOptions {
+  expiresIn?: number
+}
+
+export interface FileChunkQuery {
+  page?: number
+  perPage?: number
+}
+
+export interface FileChunkSeekQuery {
+  limit?: number
+  afterSeq?: number
+  afterId?: string
+}
+
+export interface JixiFileChunk {
+  _id?: string
+  id?: string
+  fileId?: string
+  seq?: number
+  text?: string
+  content?: string
+  [key: string]: unknown
+}
+
+export interface JixiFileIngestEvent {
+  type: string
+  id?: string
+  fileId?: string
+  appId?: string
+  status?: JixiFileStatus
+  updatedAt?: string
+  stage?: string
+  progress?: number
+  detail?: string
+  error?: string
+}

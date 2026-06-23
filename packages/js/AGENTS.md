@@ -21,6 +21,15 @@ class JixiClient {
   startAudioStream(appId: string, options?: AudioStreamOptions): Promise<AudioStream | AudioHttpStream>
   startAudioStreamHttp(appId: string, options?: AudioStreamOptions & EventStreamOptions): Promise<AudioHttpStream>
   getAudioSessionEvents(appId: string, sessionId: string, options?: { signal?: AbortSignal } & EventStreamOptions): Promise<AudioSessionEventStream>
+  listFiles(appId: string): Promise<JixiFile[]>
+  getFile(appId: string, fileId: string): Promise<JixiFile>
+  createFile(appId: string, input: CreateFileInput): Promise<JixiFile>
+  writeFile(appId: string, input: WriteFileInput): Promise<JixiFile>
+  uploadFile(appId: string, fileId: string, file: Blob, options?: UploadFileOptions): Promise<JixiFile>
+  updateFile(appId: string, fileId: string, input: UpdateFileInput): Promise<JixiFile>
+  deleteFile(appId: string, fileId: string): Promise<unknown>
+  listFileChunks(appId: string, fileId: string, options?: FileChunkQuery): Promise<JixiFileChunk[]>
+  getFileEvents(appId: string, options?: EventStreamOptions): Promise<FileEventStream>
 }
 ```
 
@@ -36,7 +45,7 @@ class JixiClient {
 ```ts
 type JixiClientConfig = {
   baseUrl?: string                        // default: https://api.jixi.ai
-  apiKey?: string                         // required for client apps
+  apiKey?: string
   sessionTokenProvider?: () => Promise<string>
   timeoutMs?: number                      // default: 30_000
   appId?: string                          // required for session token mode
@@ -44,7 +53,7 @@ type JixiClientConfig = {
 }
 ```
 
-Client apps should pass `apiKey: process.env.JIXI_API_KEY` on the server, `process.env.NEXT_PUBLIC_JIXI_API_KEY` in Next.js client components, or `import.meta.env.VITE_JIXI_API_KEY` in Vite. Create keys at https://app.jixi.ai/security.
+Server-side code can pass `apiKey: process.env.JIXI_API_KEY`. Production browser apps should use `sessionTokenProvider` to fetch short-lived tokens minted by a backend with `@jixi/node`; avoid exposing long-lived API keys in browser env vars.
 
 ### `RunWorkflowOptions`
 
@@ -77,6 +86,31 @@ class AudioStream implements AsyncIterable<AudioStreamEvent> {
 
 Returned by `startAudioStreamHttp` or `startAudioStream(..., { transport: 'http' })`.
 Async iterable of `AudioStreamEvent`. Uses HTTP chunk upload plus SSE events.
+
+### File Methods
+
+The core client includes first-class file calls for browser and Node runtimes.
+They use the same auth configuration as workflows/audio, including session
+tokens from `sessionTokenProvider`.
+
+```ts
+const files = await client.listFiles(appId)
+const file = await client.getFile(appId, fileId)
+const created = await client.createFile(appId, {
+  name: 'notes.txt',
+  type: 'File',
+  parent: appId,
+  status: 'Processing',
+})
+
+await client.uploadFile(appId, created.id!, fileBlob, { filename: 'notes.txt' })
+const chunks = await client.listFileChunks(appId, created.id!, { page: 1, perPage: 50 })
+await client.deleteFile(appId, created.id!)
+```
+
+Additional methods cover hierarchy/children, write by path, upload string data,
+replace content, download URL generation, frame URL generation, chunk counts,
+chunk pages, cursor chunk seek, all chunks, and file ingest events.
 
 ```ts
 class AudioHttpStream implements AsyncIterable<AudioStreamEvent> {

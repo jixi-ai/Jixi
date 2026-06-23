@@ -4,11 +4,31 @@ import { createEventStream, createJixiStream, type EventStreamOptions } from './
 import { JixiError } from './errors'
 import { AudioStream } from './audio-stream'
 import { AudioHttpStream } from './audio-http-stream'
-import type { JixiClientConfig, RunWorkflowOptions, AudioStreamOptions, AudioStreamEvent } from './types'
+import type {
+  JixiClientConfig,
+  RunWorkflowOptions,
+  AudioStreamOptions,
+  AudioStreamEvent,
+  CreateFileInput,
+  FileChunkQuery,
+  FileChunkSeekQuery,
+  FileDownloadUrlOptions,
+  FileFrameUrlOptions,
+  JixiFile,
+  JixiFileChunk,
+  JixiFileIngestEvent,
+  UpdateFileInput,
+  UploadFileOptions,
+  WriteFileInput,
+} from './types'
 import type { JixiStream } from './stream'
 
 export interface AudioSessionEventStream extends AsyncIterable<AudioStreamEvent> {
   readonly sessionId: string
+  cancel(): void
+}
+
+export interface FileEventStream extends AsyncIterable<JixiFileIngestEvent> {
   cancel(): void
 }
 
@@ -27,7 +47,7 @@ export class JixiClient {
   constructor(config: JixiClientConfig = {}) {
     if (!config.apiKey && !config.sessionTokenProvider) {
       throw new TypeError(
-        'JixiClient requires apiKey. Set JIXI_API_KEY in your environment, or get an API key from https://app.jixi.ai/security.',
+        'JixiClient requires apiKey or sessionTokenProvider. Use @jixi/node to mint browser session tokens, or set JIXI_API_KEY for server-side usage.',
       )
     }
     this.config = { ...config, baseUrl: config.baseUrl ?? 'https://api.jixi.ai' }
@@ -193,6 +213,197 @@ export class JixiClient {
     }
   }
 
+  async listFiles(appId: string): Promise<JixiFile[]> {
+    return this._requestJson(`/applications/${appId}/aiFiles`, {
+      method: 'GET',
+    }, `files:${appId}`)
+  }
+
+  async getFile(appId: string, fileId: string): Promise<JixiFile> {
+    return this._requestJson(`/applications/${appId}/aiFiles/${fileId}`, {
+      method: 'GET',
+    }, `file:${fileId}`)
+  }
+
+  async getFileHierarchy<T = unknown>(appId: string): Promise<T> {
+    return this._requestJson(`/applications/${appId}/aiFiles/hierarchy`, {
+      method: 'GET',
+    }, `files:${appId}:hierarchy`)
+  }
+
+  async getFileChildren(appId: string, folderId: string): Promise<JixiFile[]> {
+    return this._requestJson(`/applications/${appId}/aiFiles/children/${folderId}`, {
+      method: 'GET',
+    }, `files:${appId}:children`)
+  }
+
+  async createFile(appId: string, input: CreateFileInput): Promise<JixiFile> {
+    return this._requestJson(`/applications/${appId}/aiFiles`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }, `files:${appId}:create`)
+  }
+
+  async writeFile(appId: string, input: WriteFileInput): Promise<JixiFile> {
+    return this._requestJson(`/applications/${appId}/aiFiles/write`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }, `files:${appId}:write`)
+  }
+
+  async uploadFile(
+    appId: string,
+    fileId: string,
+    file: Blob,
+    options?: UploadFileOptions,
+  ): Promise<JixiFile> {
+    const form = new FormData()
+    form.append('file', file, options?.filename ?? inferBlobName(file))
+    return this._requestRawJson(`/applications/${appId}/aiFiles/${fileId}/upload`, {
+      method: 'POST',
+      body: form,
+    }, `files:${appId}:upload`)
+  }
+
+  async uploadFileData(appId: string, fileId: string, fileData: string): Promise<JixiFile> {
+    return this._requestJson(`/applications/${appId}/aiFiles/${fileId}/uploadFileData`, {
+      method: 'POST',
+      body: JSON.stringify({ fileData }),
+    }, `files:${appId}:uploadData`)
+  }
+
+  async replaceFileContent(
+    appId: string,
+    fileId: string,
+    file: Blob,
+    options?: UploadFileOptions,
+  ): Promise<JixiFile> {
+    const form = new FormData()
+    form.append('file', file, options?.filename ?? inferBlobName(file))
+    return this._requestRawJson(`/applications/${appId}/aiFiles/${fileId}/replaceContent`, {
+      method: 'POST',
+      body: form,
+    }, `files:${appId}:replace`)
+  }
+
+  async replaceFileContentData(appId: string, fileId: string, fileData: string): Promise<JixiFile> {
+    return this._requestJson(`/applications/${appId}/aiFiles/${fileId}/replaceContentData`, {
+      method: 'POST',
+      body: JSON.stringify({ fileData }),
+    }, `files:${appId}:replaceData`)
+  }
+
+  async updateFile(appId: string, fileId: string, input: UpdateFileInput): Promise<JixiFile> {
+    return this._requestJson(`/applications/${appId}/aiFiles/${fileId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }, `file:${fileId}:update`)
+  }
+
+  async deleteFile(appId: string, fileId: string): Promise<unknown> {
+    return this._requestJson(`/applications/${appId}/aiFiles/${fileId}`, {
+      method: 'DELETE',
+    }, `file:${fileId}:delete`)
+  }
+
+  async getFileDownloadUrl(
+    appId: string,
+    fileId: string,
+    options?: FileDownloadUrlOptions,
+  ): Promise<unknown> {
+    return this._requestJson(`/applications/${appId}/aiFiles/${fileId}/downloadUrl`, {
+      method: 'POST',
+      body: JSON.stringify(options ?? {}),
+    }, `file:${fileId}:downloadUrl`)
+  }
+
+  async getFileFrameUrl(
+    appId: string,
+    fileId: string,
+    chunkId: string,
+    options?: FileFrameUrlOptions,
+  ): Promise<unknown> {
+    return this._requestJson(`/applications/${appId}/aiFiles/${fileId}/chunks/${chunkId}/frameUrl`, {
+      method: 'POST',
+      body: JSON.stringify(options ?? {}),
+    }, `file:${fileId}:frameUrl`)
+  }
+
+  async getFileChunkCount(appId: string, fileId: string): Promise<unknown> {
+    return this._requestJson(`/applications/${appId}/aiFiles/${fileId}/chunks/count`, {
+      method: 'GET',
+    }, `file:${fileId}:chunkCount`)
+  }
+
+  async getFileChunkPages(
+    appId: string,
+    fileId: string,
+    options?: Pick<FileChunkQuery, 'perPage'>,
+  ): Promise<unknown> {
+    const query = new URLSearchParams()
+    if (options?.perPage) query.set('perPage', String(options.perPage))
+    return this._requestJson(
+      `/applications/${appId}/aiFiles/${fileId}/chunks/pages${queryString(query)}`,
+      { method: 'GET' },
+      `file:${fileId}:chunkPages`,
+    )
+  }
+
+  async listFileChunks(
+    appId: string,
+    fileId: string,
+    options?: FileChunkQuery,
+  ): Promise<JixiFileChunk[]> {
+    const query = new URLSearchParams()
+    if (options?.page) query.set('page', String(options.page))
+    if (options?.perPage) query.set('perPage', String(options.perPage))
+    return this._requestJson(
+      `/applications/${appId}/aiFiles/${fileId}/chunks${queryString(query)}`,
+      { method: 'GET' },
+      `file:${fileId}:chunks`,
+    )
+  }
+
+  async seekFileChunks(
+    appId: string,
+    fileId: string,
+    options?: FileChunkSeekQuery,
+  ): Promise<JixiFileChunk[]> {
+    const query = new URLSearchParams()
+    if (options?.limit) query.set('limit', String(options.limit))
+    if (options?.afterSeq !== undefined) query.set('afterSeq', String(options.afterSeq))
+    if (options?.afterId) query.set('afterId', options.afterId)
+    return this._requestJson(
+      `/applications/${appId}/aiFiles/${fileId}/chunks/seek${queryString(query)}`,
+      { method: 'GET' },
+      `file:${fileId}:chunkSeek`,
+    )
+  }
+
+  async listAllFileChunks(appId: string, fileId: string): Promise<JixiFileChunk[]> {
+    return this._requestJson(`/applications/${appId}/aiFiles/${fileId}/chunks/all`, {
+      method: 'GET',
+    }, `file:${fileId}:chunksAll`)
+  }
+
+  async getFileEvents(
+    appId: string,
+    options?: Pick<AudioStreamOptions, 'signal'> & EventStreamOptions,
+  ): Promise<FileEventStream> {
+    const token = await this.tokenManager.getToken()
+    const response = await this._fetchEventStream(
+      `${this._baseUrl()}/applications/${appId}/aiFiles/events/stream`,
+      token,
+      options?.signal,
+      { workflowName: `files:${appId}` },
+    )
+    const events = createEventStream<JixiFileIngestEvent>(response, options)
+    return {
+      cancel: () => events.cancel(),
+      [Symbol.asyncIterator]: () => events[Symbol.asyncIterator](),
+    }
+  }
+
   private async _startAudioStreamWebSocket(appId: string, options?: AudioStreamOptions): Promise<AudioStream> {
     if (typeof WebSocket === 'undefined') {
       throw new JixiError(
@@ -336,8 +547,98 @@ export class JixiClient {
     return response
   }
 
+  private async _requestJson<T>(
+    path: string,
+    init: RequestInit,
+    workflowName: string,
+  ): Promise<T> {
+    let token = await this.tokenManager.getToken()
+    const url = `${this._baseUrl()}${path}`
+    try {
+      return await _request<T>(url, init, {
+        workflowName,
+        timeoutMs: this.config.timeoutMs ?? 30_000,
+        token,
+      })
+    } catch (err) {
+      if (err instanceof JixiError && err.code === 'auth_failed') {
+        this.tokenManager.invalidate()
+        token = await this.tokenManager.getToken()
+        return _request<T>(url, init, {
+          workflowName,
+          timeoutMs: this.config.timeoutMs ?? 30_000,
+          token,
+        })
+      }
+      throw err
+    }
+  }
+
+  private async _requestRawJson<T>(
+    path: string,
+    init: RequestInit,
+    workflowName: string,
+  ): Promise<T> {
+    let token = await this.tokenManager.getToken()
+    try {
+      return await this._rawJson<T>(path, init, workflowName, token)
+    } catch (err) {
+      if (err instanceof JixiError && err.code === 'auth_failed') {
+        this.tokenManager.invalidate()
+        token = await this.tokenManager.getToken()
+        return this._rawJson<T>(path, init, workflowName, token)
+      }
+      throw err
+    }
+  }
+
+  private async _rawJson<T>(
+    path: string,
+    init: RequestInit,
+    workflowName: string,
+    token: string,
+  ): Promise<T> {
+    const response = await fetch(`${this._baseUrl()}${path}`, {
+      ...init,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    })
+
+    if (!response.ok) {
+      const code = response.status === 401 ? 'auth_failed'
+        : response.status >= 500 ? 'server_error'
+        : 'unknown'
+      throw new JixiError(
+        `Request failed: ${response.status} ${response.statusText}`,
+        code,
+        { status: response.status, workflowName },
+      )
+    }
+
+    const text = await response.text()
+    if (!text) return undefined as T
+    try {
+      return JSON.parse(text) as T
+    } catch {
+      return text as T
+    }
+  }
+
   private _absoluteUrl(pathOrUrl: string): string {
     if (/^https?:\/\//.test(pathOrUrl)) return pathOrUrl
     return `${this._baseUrl()}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`
   }
+}
+
+function inferBlobName(file: Blob): string {
+  return typeof (file as File).name === 'string' && (file as File).name
+    ? (file as File).name
+    : 'file'
+}
+
+function queryString(params: URLSearchParams): string {
+  const value = params.toString()
+  return value ? `?${value}` : ''
 }

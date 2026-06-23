@@ -19,15 +19,19 @@ Wrap your app (or a subtree) once. Creates a single `JixiClient` and stores it i
 ```tsx
 <JixiProvider
   appId="ak_app_123"
-  apiKey={process.env.NEXT_PUBLIC_JIXI_API_KEY}
+  sessionTokenProvider={async () => {
+    const res = await fetch('/api/jixi/session', { method: 'POST' })
+    const { token } = await res.json()
+    return token
+  }}
 >
   {children}
 </JixiProvider>
 ```
 
-Props (`JixiProviderProps`): `children`, `baseUrl?`, `apiKey?`, `appId?`, `timeoutMs?`, `tokenTtlMs?`. `baseUrl` defaults to `https://api.jixi.ai`.
+Props (`JixiProviderProps`): `children`, `baseUrl?`, `apiKey?`, `sessionTokenProvider?`, `appId?`, `timeoutMs?`, `tokenTtlMs?`. `baseUrl` defaults to `https://api.jixi.ai`.
 
-Client apps must provide `apiKey`. For Next.js client components, use `NEXT_PUBLIC_JIXI_API_KEY`. For Vite, use `VITE_JIXI_API_KEY`. Create keys at https://app.jixi.ai/security.
+Production browser apps should provide `sessionTokenProvider` and mint short-lived session tokens from a backend using `@jixi/node`. Avoid exposing long-lived API keys in browser code. Direct `apiKey` mode is still supported for server-side usage and trusted local demos.
 
 Client is created via `useMemo` keyed on all config props. In practice it is created once per app lifetime because env vars and static functions do not change.
 
@@ -150,6 +154,39 @@ const { events, transcript, interimText, fileId, isStreaming, isComplete, error,
 - `sessionId` may be `null`/`undefined`; the hook stays reset until a value is supplied.
 - Replayed events are deduped by `seq`.
 - Transcript aggregation matches `useJixiAudioStream`.
+
+### `useJixiFiles(appId)`
+
+Loads and mutates files for an application. Wraps the `@jixi/js` file methods.
+
+```ts
+const { files, reload, create, write, upload, update, remove, isLoading, error } =
+  useJixiFiles(appId)
+```
+
+- `reload()` — list files for the app
+- `create(input)` — create a file/folder record
+- `write(input)` — write content at a path
+- `upload(fileId, file, options?)` — multipart upload into an existing file
+- `update(fileId, input)` — update file metadata
+- `remove(fileId)` — delete a file
+
+### `useJixiFile(appId, fileId)`
+
+Loads one file by ID.
+
+```ts
+const { file, reload, isLoading, error } = useJixiFile(appId, fileId)
+```
+
+### `useJixiFileChunks(appId, fileId, options?)`
+
+Loads paged chunks for a file.
+
+```ts
+const { chunks, reload, isLoading, error } =
+  useJixiFileChunks(appId, fileId, { page: 1, perPage: 50 })
+```
 
 ### `useJixiTextStream<TIn>(workflowName, options?)`
 

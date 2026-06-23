@@ -17,13 +17,19 @@ Exported from `src/index.ts`.
 Creates a writable Svelte store whose value is a `JixiClient` instance.
 
 ```ts
-const jixiStore = createJixiStore({ apiKey: import.meta.env.VITE_JIXI_API_KEY })
+const jixiStore = createJixiStore({
+  sessionTokenProvider: async () => {
+    const res = await fetch('/api/jixi/session', { method: 'POST' })
+    const { token } = await res.json()
+    return token
+  },
+})
 // Access client: $jixiStore or jixiStore.client
 ```
 
 Returns `{ subscribe, set, client }`.
 
-Client apps must provide `apiKey`. For Vite, use `VITE_JIXI_API_KEY`. Create keys at https://app.jixi.ai/security. `baseUrl` defaults to `https://api.jixi.ai`.
+Production browser apps should provide `sessionTokenProvider` and mint short-lived session tokens from a backend using `@jixi/node`. Avoid exposing long-lived API keys in browser code. Direct `apiKey` mode is still supported for server-side usage and trusted local demos. `baseUrl` defaults to `https://api.jixi.ai`.
 
 ### `workflowStore<T>()`
 

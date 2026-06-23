@@ -18,7 +18,7 @@ Call once in a parent component (e.g. `App.vue`) to create a `JixiClient` and ma
 
 Uses a `Symbol('jixi')` key internally — do not use `inject` directly; use `injectJixi()`.
 
-Client apps must provide `apiKey`. For Vite, use `import.meta.env.VITE_JIXI_API_KEY`. Create keys at https://app.jixi.ai/security. `baseUrl` defaults to `https://api.jixi.ai`.
+Production browser apps should provide `sessionTokenProvider` and mint short-lived session tokens from a backend using `@jixi/node`. Avoid exposing long-lived API keys in browser code. Direct `apiKey` mode is still supported for server-side usage and trusted local demos. `baseUrl` defaults to `https://api.jixi.ai`.
 
 ### `injectJixi(): JixiClient`
 

@@ -54,7 +54,7 @@ afterEach(() => {
 describe('JixiClient constructor', () => {
   it('throws TypeError eagerly with API key setup help when no auth is configured', () => {
     expect(() => new JixiClient()).toThrow(
-      'JixiClient requires apiKey. Set JIXI_API_KEY in your environment, or get an API key from https://app.jixi.ai/security.',
+      'JixiClient requires apiKey or sessionTokenProvider. Use @jixi/node to mint browser session tokens, or set JIXI_API_KEY for server-side usage.',
     )
   })
 
@@ -387,5 +387,77 @@ describe('JixiClient.startAudioStreamHttp', () => {
     const events = []
     for await (const event of stream) events.push(event)
     expect(events).toHaveLength(1)
+  })
+})
+
+describe('JixiClient file methods', () => {
+  it('lists, reads, and deletes files with bearer auth', async () => {
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce(makeJsonResponse([{ id: 'file-1', name: 'a.txt', type: 'File' }]))
+      .mockResolvedValueOnce(makeJsonResponse({ id: 'file-1', name: 'a.txt', type: 'File' }))
+      .mockResolvedValueOnce(makeJsonResponse({ deleted: true }))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const client = new JixiClient({ baseUrl: 'https://api.jixi.ai', apiKey: 'jx' })
+
+    await expect(client.listFiles('app-1')).resolves.toHaveLength(1)
+    await expect(client.getFile('app-1', 'file-1')).resolves.toMatchObject({ id: 'file-1' })
+    await expect(client.deleteFile('app-1', 'file-1')).resolves.toEqual({ deleted: true })
+
+    expect(mockFetch.mock.calls[0][0]).toBe('https://api.jixi.ai/applications/app-1/aiFiles')
+    expect(mockFetch.mock.calls[0][1].headers.Authorization).toBe('Bearer jx')
+    expect(mockFetch.mock.calls[1][0]).toBe('https://api.jixi.ai/applications/app-1/aiFiles/file-1')
+    expect(mockFetch.mock.calls[2][1].method).toBe('DELETE')
+  })
+
+  it('uploads multipart file content without forcing JSON content-type', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(makeJsonResponse({ id: 'file-1', name: 'a.txt', type: 'File' }))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const client = new JixiClient({ baseUrl: 'https://api.jixi.ai', apiKey: 'jx' })
+    await client.uploadFile('app-1', 'file-1', new Blob(['hello'], { type: 'text/plain' }), {
+      filename: 'a.txt',
+    })
+
+    const [url, init] = mockFetch.mock.calls[0]
+    expect(url).toBe('https://api.jixi.ai/applications/app-1/aiFiles/file-1/upload')
+    expect(init.method).toBe('POST')
+    expect(init.headers.Authorization).toBe('Bearer jx')
+    expect(init.headers['Content-Type']).toBeUndefined()
+    expect(init.body).toBeInstanceOf(FormData)
+  })
+
+  it('retries file requests with a fresh session token after 401', async () => {
+    const provider = vi.fn()
+      .mockResolvedValueOnce('tok-stale')
+      .mockResolvedValueOnce('tok-fresh')
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce(makeErrorResponse(401))
+      .mockResolvedValueOnce(makeJsonResponse([{ id: 'file-1', name: 'a.txt', type: 'File' }]))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const client = new JixiClient({ baseUrl: 'https://api.jixi.ai', sessionTokenProvider: provider })
+    await expect(client.listFiles('app-1')).resolves.toHaveLength(1)
+
+    expect(provider).toHaveBeenCalledTimes(2)
+    expect(mockFetch.mock.calls[1][1].headers.Authorization).toBe('Bearer tok-fresh')
+  })
+
+  it('opens the file ingest event stream', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(makeSseResponse([
+      sseFrame({ fileId: 'file-1', appId: 'app-1', status: 'Processing' }),
+    ]))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const client = new JixiClient({ baseUrl: 'https://api.jixi.ai', apiKey: 'jx' })
+    const stream = await client.getFileEvents('app-1')
+
+    const [url, init] = mockFetch.mock.calls[0]
+    expect(url).toBe('https://api.jixi.ai/applications/app-1/aiFiles/events/stream')
+    expect(init.headers.Accept).toBe('text/event-stream')
+
+    const events = []
+    for await (const event of stream) events.push(event)
+    expect(events).toEqual([{ fileId: 'file-1', appId: 'app-1', status: 'Processing' }])
   })
 })

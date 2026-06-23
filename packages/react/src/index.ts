@@ -6,6 +6,9 @@ export { useJixiTextStream } from './use-jixi-text-stream'
 export { useJixiAudioStream } from './use-jixi-audio-stream'
 export { useJixiRunEvents } from './use-jixi-run-events'
 export { useJixiAudioSessionEvents } from './use-jixi-audio-session-events'
+export { useJixiFiles } from './use-jixi-files'
+export { useJixiFile } from './use-jixi-file'
+export { useJixiFileChunks } from './use-jixi-file-chunks'
 export type {
   JixiProviderProps,
   JixiWorkflowResult,
@@ -15,6 +18,16 @@ export type {
   JixiAudioStreamResult,
   JixiRunEventsResult,
   JixiAudioSessionEventsResult,
+  JixiFilesResult,
+  JixiFileResult,
+  JixiFileChunksResult,
   AudioStreamEvent,
   AudioStreamOptions,
+  CreateFileInput,
+  FileChunkQuery,
+  JixiFile,
+  JixiFileChunk,
+  UpdateFileInput,
+  UploadFileOptions,
+  WriteFileInput,
 } from './types'

@@ -8,6 +8,13 @@ import type {
   SessionTokenProvider,
   AudioStreamEvent,
   AudioStreamOptions,
+  CreateFileInput,
+  FileChunkQuery,
+  JixiFile,
+  JixiFileChunk,
+  UpdateFileInput,
+  UploadFileOptions,
+  WriteFileInput,
 } from '@jixi/js'
 import type { ReactNode } from 'react'
 
@@ -105,3 +112,42 @@ export type JixiAudioSessionEventsResult = {
 }
 
 export type { AudioStreamEvent, AudioStreamOptions, EventStreamOptions }
+
+export type JixiFilesResult = {
+  files: JixiFile[]
+  isLoading: boolean
+  error: JixiError | null
+  reload: () => Promise<JixiFile[] | null>
+  create: (input: CreateFileInput) => Promise<JixiFile | null>
+  write: (input: WriteFileInput) => Promise<JixiFile | null>
+  upload: (fileId: string, file: Blob, options?: UploadFileOptions) => Promise<JixiFile | null>
+  update: (fileId: string, input: UpdateFileInput) => Promise<JixiFile | null>
+  remove: (fileId: string) => Promise<unknown>
+  reset: () => void
+}
+
+export type JixiFileResult = {
+  file: JixiFile | null
+  isLoading: boolean
+  error: JixiError | null
+  reload: () => Promise<JixiFile | null>
+  reset: () => void
+}
+
+export type JixiFileChunksResult = {
+  chunks: JixiFileChunk[]
+  isLoading: boolean
+  error: JixiError | null
+  reload: () => Promise<JixiFileChunk[] | null>
+  reset: () => void
+}
+
+export type {
+  CreateFileInput,
+  FileChunkQuery,
+  JixiFile,
+  JixiFileChunk,
+  UpdateFileInput,
+  UploadFileOptions,
+  WriteFileInput,
+}
