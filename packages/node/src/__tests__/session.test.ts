@@ -19,7 +19,7 @@ describe('createSessionToken', () => {
   })
 
   it('creates a signed HS256 JWT with default expiry', async () => {
-    const token = await createSessionToken('secret-123', { userId: 'user-1' })
+    const token = await createSessionToken('secret-123', { userId: 'user-1', appId: 'app-1' })
     const parts = token.split('.')
 
     expect(parts).toHaveLength(3)
@@ -27,6 +27,7 @@ describe('createSessionToken', () => {
     expect(decodePart(parts[1])).toEqual({
       sub: 'user-1',
       userId: 'user-1',
+      appId: 'app-1',
       iat: 1782216000,
       exp: 1782216300,
     })
@@ -36,6 +37,7 @@ describe('createSessionToken', () => {
   it('honors explicit expiry and scoped permissions', async () => {
     const token = await createSessionToken('secret-123', {
       userId: 'user-2',
+      appId: 'app-2',
       expiresIn: 900,
       permissions: {
         workflows: ['support_answer'],
@@ -46,6 +48,7 @@ describe('createSessionToken', () => {
     expect(decodePart(token.split('.')[1])).toEqual({
       sub: 'user-2',
       userId: 'user-2',
+      appId: 'app-2',
       iat: 1782216000,
       exp: 1782216900,
       permissions: {
@@ -57,14 +60,20 @@ describe('createSessionToken', () => {
   })
 
   it('requires a secret', async () => {
-    await expect(createSessionToken('', { userId: 'user-1' })).rejects.toThrow(
+    await expect(createSessionToken('', { userId: 'user-1', appId: 'app-1' })).rejects.toThrow(
       'secret is required to create session tokens',
     )
   })
 
   it('requires a userId', async () => {
-    await expect(createSessionToken('secret-123', { userId: '' })).rejects.toThrow(
+    await expect(createSessionToken('secret-123', { userId: '', appId: 'app-1' })).rejects.toThrow(
       'userId is required to create a session token',
+    )
+  })
+
+  it('requires an appId', async () => {
+    await expect(createSessionToken('secret-123', { userId: 'user-1', appId: '' })).rejects.toThrow(
+      'appId is required to create a session token',
     )
   })
 })

@@ -5,6 +5,7 @@ export interface ScopedPermissions {
 
 export interface SessionOptions {
   userId: string
+  appId: string
   permissions?: ScopedPermissions
   expiresIn?: number
 }

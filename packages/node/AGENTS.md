@@ -6,7 +6,7 @@ Server-side Jixi client for Node.js backends: Express, NestJS, serverless functi
 queues, workers, webhooks, and API routes.
 
 Use this package on the server to:
-1. Generate short-lived session tokens for browser clients.
+1. Mint short-lived session tokens for browser clients.
 2. Execute workflows server-side using inherited `@jixi/js` methods.
 3. Consume workflow and audio SSE streams from backend code.
 4. Own workflow definitions, prompts, and tests in backend repos.
@@ -37,13 +37,22 @@ getWorkflowRunEvents(workflowName, runId, options?)
 startAudioStream(appId, options?)
 startAudioStreamHttp(appId, options?)
 getAudioSessionEvents(appId, sessionId, options?)
+listFiles(appId)
+getFile(appId, fileId)
+createFile(appId, input)
+writeFile(appId, input)
+uploadFile(appId, fileId, file, options?)
+updateFile(appId, fileId, input)
+deleteFile(appId, fileId)
+listFileChunks(appId, fileId, options?)
+getFileEvents(appId, options?)
 ```
 
 Constructor config extends `JixiClientConfig` with:
 
 ```ts
 type JixiNodeConfig = JixiClientConfig & {
-  secret?: string
+  secret?: string // self-hosted/offline signing only
 }
 ```
 
@@ -54,20 +63,37 @@ import { JixiNodeClient } from '@jixi/node'
 
 const client = new JixiNodeClient({
   apiKey: process.env.JIXI_API_KEY,
-  secret: process.env.JIXI_SECRET,
 })
 ```
 
-Set `JIXI_API_KEY` and `JIXI_SECRET` in the server environment. `baseUrl`
-defaults to `https://api.jixi.ai`.
+Set `JIXI_API_KEY` in the server environment. `baseUrl` defaults to `https://api.jixi.ai`.
+
+### `client.mintSessionToken(options)`
+
+Hosted Jixi path. Exchanges the configured app API key for a short-lived browser
+session token. The API key stays on your backend.
+
+```ts
+const token = await client.mintSessionToken({
+  userId: user.id,
+  appId: 'app_123',
+  expiresIn: 300,
+  permissions: {
+    workflows: ['support_answer'],
+    readOnly: true,
+  },
+})
+```
 
 ### `createSessionToken(secret, options)`
 
-Creates a short-lived JWT session token for browser clients.
+Self-hosted/offline signing path. Creates a short-lived JWT session token with a
+locally configured signing secret.
 
 ```ts
 const token = await createSessionToken(process.env.JIXI_SECRET!, {
   userId: user.id,
+  appId: 'app_123',
   expiresIn: 300,
   permissions: {
     workflows: ['support_answer'],
@@ -81,6 +107,7 @@ const token = await createSessionToken(process.env.JIXI_SECRET!, {
 ```ts
 type SessionOptions = {
   userId: string
+  appId: string
   permissions?: {
     workflows?: string[]
     readOnly?: boolean
@@ -91,6 +118,7 @@ type SessionOptions = {
 
 - `expiresIn` is seconds.
 - Default `expiresIn` is `300` seconds.
+- `appId` is required and scopes the token to one Jixi application.
 - The JWT is signed with HS256 using Node `crypto`.
 - Payload includes `sub`, `userId`, `iat`, `exp`, and optional `permissions`.
 
@@ -103,8 +131,9 @@ constructed with `secret`.
 
 ```ts
 app.post('/api/jixi/session', async (req, res) => {
-  const token = await client.createSessionToken({
+  const token = await client.mintSessionToken({
     userId: req.user.id,
+    appId: process.env.JIXI_APP_ID!,
     expiresIn: 300,
     permissions: { readOnly: true },
   })
@@ -186,7 +215,7 @@ workflow, SSE, audio, auth retry, and request behavior is tested in `@jixi/js`.
 
 - `JixiNodeClient` construction still follows `@jixi/js` auth rules: provide
   `apiKey` or `sessionTokenProvider`.
-- `secret` is required only for creating session tokens.
+- `secret` is required only for self-hosted/offline `createSessionToken`.
 - `@jixi/node` is for server code. Do not use it in browser bundles.
 - `@jixi/next` is a future package for mixed client/server frameworks; do not
   fold that behavior into `@jixi/node`.
