@@ -51,9 +51,7 @@ getFileEvents(appId, options?)
 Constructor config extends `JixiClientConfig` with:
 
 ```ts
-type JixiNodeConfig = JixiClientConfig & {
-  secret?: string // self-hosted/offline signing only
-}
+type JixiNodeConfig = JixiClientConfig
 ```
 
 Example:
@@ -76,7 +74,6 @@ session token. The API key stays on your backend.
 ```ts
 const token = await client.mintSessionToken({
   userId: user.id,
-  appId: 'app_123',
   expiresIn: 300,
   permissions: {
     workflows: ['support_answer'],
@@ -84,46 +81,6 @@ const token = await client.mintSessionToken({
   },
 })
 ```
-
-### `createSessionToken(secret, options)`
-
-Self-hosted/offline signing path. Creates a short-lived JWT session token with a
-locally configured signing secret.
-
-```ts
-const token = await createSessionToken(process.env.JIXI_SECRET!, {
-  userId: user.id,
-  appId: 'app_123',
-  expiresIn: 300,
-  permissions: {
-    workflows: ['support_answer'],
-    readOnly: true,
-  },
-})
-```
-
-`SessionOptions`:
-
-```ts
-type SessionOptions = {
-  userId: string
-  appId: string
-  permissions?: {
-    workflows?: string[]
-    readOnly?: boolean
-  }
-  expiresIn?: number
-}
-```
-
-- `expiresIn` is seconds.
-- Default `expiresIn` is `300` seconds.
-- `appId` is required and scopes the token to one Jixi application.
-- The JWT is signed with HS256 using Node `crypto`.
-- Payload includes `sub`, `userId`, `iat`, `exp`, and optional `permissions`.
-
-You can also call `client.createSessionToken(options)` when the client was
-constructed with `secret`.
 
 ## Backend Usage
 
@@ -133,7 +90,6 @@ constructed with `secret`.
 app.post('/api/jixi/session', async (req, res) => {
   const token = await client.mintSessionToken({
     userId: req.user.id,
-    appId: process.env.JIXI_APP_ID!,
     expiresIn: 300,
     permissions: { readOnly: true },
   })
@@ -208,14 +164,14 @@ npm run build
 ```
 
 Tests live in `src/__tests__/` and should cover only Node-specific behavior:
-session token signing, exports, and `JixiNodeClient` server helpers. Inherited
-workflow, SSE, audio, auth retry, and request behavior is tested in `@jixi/js`.
+hosted session-token minting, exports, and `JixiNodeClient` server helpers.
+Inherited workflow, SSE, audio, auth retry, and request behavior is tested in
+`@jixi/js`.
 
 ## Known Constraints
 
 - `JixiNodeClient` construction still follows `@jixi/js` auth rules: provide
   `apiKey` or `sessionTokenProvider`.
-- `secret` is required only for self-hosted/offline `createSessionToken`.
 - `@jixi/node` is for server code. Do not use it in browser bundles.
 - `@jixi/next` is a future package for mixed client/server frameworks; do not
   fold that behavior into `@jixi/node`.

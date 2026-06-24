@@ -3,9 +3,8 @@ export interface ScopedPermissions {
   readOnly?: boolean
 }
 
-export interface SessionOptions {
+export interface MintSessionTokenOptions {
   userId: string
-  appId: string
   permissions?: ScopedPermissions
   expiresIn?: number
 }

@@ -1,6 +1,6 @@
 {
   "name": "@jixi/js",
-  "version": "0.2.3",
+  "version": "0.4.0",
   "description": "Jixi core browser client: HTTP, SSE streaming, auth, and workflow execution",
   "type": "module",
   "main": "./dist/index.cjs",
